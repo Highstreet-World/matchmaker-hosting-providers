@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+
+jobs:
+  build:
+    name: Build and Pack Module
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module:
+          [
+            "GameLiftAllocator",
+            "MultiplayAllocator",
+            "PlayFabAllocator",
+            "AgonesAllocator",
+          ]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "9.0.x"
+      - name: Publish Module
+        run: dotnet publish -c Release modules/${{ matrix.module }} -o publish
+      - name: Bundle Module Archive
+        run: zip -r ${{ matrix.module }}.ccm publish/*
+
+  test:
+    name: Test Modules
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: "9.0.x"
+      - name: Test Modules
+        run: dotnet test tests/AllocatorTests
