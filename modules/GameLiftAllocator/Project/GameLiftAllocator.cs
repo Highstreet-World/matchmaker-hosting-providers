@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Amazon;
 using Amazon.GameLift;
@@ -12,6 +11,7 @@ using Unity.Services.CloudCode.Core;
 using Unity.Services.CloudCode.Apis.Matchmaker;
 using IExecutionContext = Unity.Services.CloudCode.Core.IExecutionContext;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace GameLiftAllocatorModule;
 
@@ -31,7 +31,7 @@ public class ModuleConfig : ICloudCodeSetup
 public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory gameLiftFactory, ILogger<GameLiftAllocator> logger) : IMatchmakerAllocator
 {
     // Configuration - users should modify these constants for their setup
-    private const string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
+    private const string GameSessionQueueName = "GladGameSessionQueue"; // TODO: Replace with actual queue name
     private const int DefaultMaximumPlayerSessionCount = 10;
     private const string DefaultAwsRegion = "us-west-2";
 
@@ -52,11 +52,15 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
             var secretAccessKey = await gameApiClient.SecretManager.GetSecret(context, AwsSecretAccessKeySecretName);
 
             // Create GameLift client with credentials from secrets
+
+            logger.LogInformation("[Allocator]Creating GameLift client for region {Region}", region);
             using var client = gameLiftFactory.Create(accessKeyId.Value, secretAccessKey.Value, region);
 
+            logger.LogInformation("[Allocator]Starting game session placement for match {MatchId}", request.MatchId);
             // Serialize match data for the game server
-            var gameSessionData = JsonSerializer.Serialize(request.MatchmakingResults);
+            var gameSessionData = JsonConvert.SerializeObject(request.MatchmakingResults);
 
+            logger.LogInformation("[Allocator]Game session data: {GameSessionData}", gameSessionData);
             // Start game session placement
             var placementRequest = new StartGameSessionPlacementRequest
             {
@@ -66,8 +70,14 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
                 GameSessionData = gameSessionData
             };
 
+            logger.LogInformation("[Allocator]Sending StartGameSessionPlacement request: {@PlacementRequest}", placementRequest);
             var response = await client.StartGameSessionPlacementAsync(placementRequest);
+
+            logger.LogInformation("[Allocator]Game session placement started: {@Response}", response);
+
             var placement = response.GameSessionPlacement;
+
+            logger.LogInformation("[Allocator]Placement ID: {PlacementId}, Status: {Status}", placement.PlacementId, placement.Status.Value);
 
             return new AllocateResponse(AllocateStatus.Created)
             {
@@ -112,6 +122,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
             var secretAccessKey = await gameApiClient.SecretManager.GetSecret(context, AwsSecretAccessKeySecretName);
 
             // Create GameLift client with credentials from secrets
+            logger.LogInformation("[Poll]Creating GameLift client for region {Region}", region);
             using var client = gameLiftFactory.Create(accessKeyId.Value, secretAccessKey.Value, region);
 
             var describeRequest = new DescribeGameSessionPlacementRequest
@@ -119,33 +130,35 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
                 PlacementId = placementId
             };
 
+            logger.LogInformation("[Poll]Describing game session placement for PlacementId: {PlacementId}", placementId);
+
             var response = await client.DescribeGameSessionPlacementAsync(describeRequest);
+            logger.LogInformation("[Poll]DescribeGameSessionPlacement response: {@Response}", response);
             var placement = response.GameSessionPlacement;
 
-            return placement.Status.Value switch
+            logger.LogInformation("[Poll]Placement ID: {PlacementId}, Status: {Status}", placement.PlacementId, placement.Status.Value);
+
+            switch (placement.Status.Value)
             {
-                "PENDING" => new PollResponse(PollStatus.Pending),
-                "FULFILLED" => new PollResponse(PollStatus.Allocated)
-                {
-                    AssignmentData = AssignmentData.IpPort(placement.IpAddress, placement.Port),
-                },
-                "TIMED_OUT" => new PollResponse(PollStatus.Error)
-                {
-                    Message = "Game session placement timed out"
-                },
-                "CANCELLED" => new PollResponse(PollStatus.Error)
-                {
-                    Message = "Game session placement was cancelled"
-                },
-                "FAILED" => new PollResponse(PollStatus.Error)
-                {
-                    Message = "Game session placement failed"
-                },
-                _ => new PollResponse(PollStatus.Error)
-                {
-                    Message = $"Unknown placement status: {placement.Status.Value}"
-                }
-            };
+                case "PENDING":
+                    logger.LogInformation("[Poll]Game session placement is still pending");
+                    return new PollResponse(PollStatus.Pending);
+                case "FULFILLED":
+                    logger.LogInformation("[Poll]Game session placement fulfilled: IP {IpAddress}, Port {Port}", placement.IpAddress, placement.Port);
+                    return new PollResponse(PollStatus.Allocated) { AssignmentData = AssignmentData.IpPort(placement.IpAddress, placement.Port), };
+                case "TIMED_OUT":
+                    logger.LogInformation("[Poll]Game session placement timed out");
+                    return new PollResponse(PollStatus.Error) { Message = "Game session placement timed out" };
+                case "CANCELLED":
+                    logger.LogInformation("[Poll]Game session placement was cancelled");
+                    return new PollResponse(PollStatus.Error) { Message = "Game session placement was cancelled" };
+                case "FAILED":
+                    logger.LogInformation("[Poll]Game session placement failed");
+                    return new PollResponse(PollStatus.Error) { Message = "Game session placement failed" };
+                default:
+                    logger.LogWarning("Unknown game session placement status: {Status}", placement.Status.Value);
+                    return new PollResponse(PollStatus.Error) { Message = $"Unknown placement status: {placement.Status.Value}" };
+            }
         }
         catch (Exception ex)
         {
