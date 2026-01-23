@@ -31,7 +31,7 @@ public class ModuleConfig : ICloudCodeSetup
 public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory gameLiftFactory, ILogger<GameLiftAllocator> logger) : IMatchmakerAllocator
 {
     // Configuration - users should modify these constants for their setup
-    private const string GameSessionQueueName = "GladGameSessionQueue"; // TODO: Replace with actual queue name
+    private const string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
     private const int DefaultMaximumPlayerSessionCount = 10;
     private const string DefaultAwsRegion = "us-west-2";
 
