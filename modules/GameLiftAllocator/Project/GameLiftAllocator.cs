@@ -31,9 +31,9 @@ public class ModuleConfig : ICloudCodeSetup
 public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory gameLiftFactory, ILogger<GameLiftAllocator> logger) : IMatchmakerAllocator
 {
     // Configuration - users should modify these constants for their setup
-    private const string GameSessionQueueName = "MyQueue"; // TODO: Replace with actual queue name
+    private const string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
     private const int DefaultMaximumPlayerSessionCount = 10;
-    private const string DefaultAwsRegion = "eu-west-2";
+    private const string DefaultAwsRegion = "us-west-2";
 
     // Secret names - these must match the secrets stored in Unity Dashboard
     private const string AwsAccessKeyIdSecretName = "AWS_ACCESS_KEY_ID";
