@@ -109,6 +109,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
 
         if (region == null)
         {
+            logger.LogError("Poll region was not specified in allocation data");
             return new PollResponse(PollStatus.Error)
             {
                 Message = "Poll region was not specified"
@@ -153,7 +154,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
                     logger.LogInformation("[Poll]Game session placement was cancelled");
                     return new PollResponse(PollStatus.Error) { Message = "Game session placement was cancelled" };
                 case "FAILED":
-                    logger.LogInformation("[Poll]Game session placement failed");
+                    logger.LogError("[Poll]Game session placement failed");
                     return new PollResponse(PollStatus.Error) { Message = "Game session placement failed" };
                 default:
                     logger.LogWarning("Unknown game session placement status: {Status}", placement.Status.Value);
