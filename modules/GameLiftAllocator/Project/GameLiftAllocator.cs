@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Text.Json;
 using System.Threading.Tasks;
 using Amazon;
 using Amazon.GameLift;
@@ -12,6 +11,7 @@ using Unity.Services.CloudCode.Core;
 using Unity.Services.CloudCode.Apis.Matchmaker;
 using IExecutionContext = Unity.Services.CloudCode.Core.IExecutionContext;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 
 namespace GameLiftAllocatorModule;
 
@@ -55,7 +55,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
             using var client = gameLiftFactory.Create(accessKeyId.Value, secretAccessKey.Value, region);
 
             // Serialize match data for the game server
-            var gameSessionData = JsonSerializer.Serialize(request.MatchmakingResults);
+            var gameSessionData = JsonConvert.SerializeObject(request.MatchmakingResults);
 
             // Start game session placement
             var placementRequest = new StartGameSessionPlacementRequest
