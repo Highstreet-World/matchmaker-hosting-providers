@@ -31,8 +31,8 @@ public class ModuleConfig : ICloudCodeSetup
 public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory gameLiftFactory, ILogger<GameLiftAllocator> logger) : IMatchmakerAllocator
 {
     // Configuration - users should modify these constants for their setup
-    private const string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
-    private const int DefaultMaximumPlayerSessionCount = 10;
+    //  private string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
+    private int _defaultMaximumPlayerSessionCount = 10;
     private const string DefaultAwsRegion = "us-west-2";
 
     // Secret names - these must match the secrets stored in Unity Dashboard
@@ -44,7 +44,23 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
     {
         // Determine AWS region from match properties or use default
         var region = request.MatchmakingResults.MatchProperties.GetValueOrDefault("region")?.ToString() ?? DefaultAwsRegion;
+        var gameSessionQueueName = request.MatchmakingResults.QueueName;
+        logger.LogInformation("[Allocator]Using Game Session Queue Name: {GameSessionQueueName}", gameSessionQueueName);
 
+        //debug request.MatchmakingResults.MatchProperties as json 
+        logger.LogInformation("[Allocator]Match Properties: {MatchProperties}", JsonConvert.SerializeObject(request.MatchmakingResults.MatchProperties));
+        //get cloud save game data Custom Item ID "queue" Key "Lobby" 
+        var cloudSave = gameApiClient.CloudSaveData;
+        //list of string
+
+        var savedData = await cloudSave.GetCustomItemsAsync(context, context.AccessToken, context.ProjectId, "queue", new List<string>() { gameSessionQueueName });
+        var results = savedData.Data.Results;
+        logger.LogInformation("[Allocator]Game Session Results Count: {ResultsCount}", results.Count);
+        //debug results as JSON
+        logger.LogInformation("[Allocator]Game Session Results: {Results}", JsonConvert.SerializeObject(results));
+      //  _defaultMaximumPlayerSessionCount = results[0].Value as int? ?? 0;
+        logger.LogInformation("[Allocator]Using Maximum Player Session Count: {MaxPlayerSessionCount}", _defaultMaximumPlayerSessionCount);
+ 
         try
         {
             // Retrieve AWS credentials from Unity Secret Manager
@@ -65,8 +81,8 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
             var placementRequest = new StartGameSessionPlacementRequest
             {
                 PlacementId = request.MatchId, // Use matchId for idempotency
-                GameSessionQueueName = GameSessionQueueName,
-                MaximumPlayerSessionCount = DefaultMaximumPlayerSessionCount,
+                GameSessionQueueName = gameSessionQueueName,
+                MaximumPlayerSessionCount = _defaultMaximumPlayerSessionCount,
                 GameSessionData = gameSessionData
             };
 
