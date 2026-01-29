@@ -32,7 +32,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
 {
     // Configuration - users should modify these constants for their setup
     //  private string GameSessionQueueName = "GladiatorQueue"; // TODO: Replace with actual queue name
-    private int _defaultMaximumPlayerSessionCount = 10;
+    private int _defaultMaximumPlayerSessionCount = 100;
     private const string DefaultAwsRegion = "us-west-2";
 
     // Secret names - these must match the secrets stored in Unity Dashboard
@@ -47,20 +47,21 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
         var gameSessionQueueName = request.MatchmakingResults.QueueName;
         logger.LogInformation("[Allocator]Using Game Session Queue Name: {GameSessionQueueName}", gameSessionQueueName);
 
-        //debug request.MatchmakingResults.MatchProperties as json 
-        logger.LogInformation("[Allocator]Match Properties: {MatchProperties}", JsonConvert.SerializeObject(request.MatchmakingResults.MatchProperties));
-        //get cloud save game data Custom Item ID "queue" Key "Lobby" 
-        var cloudSave = gameApiClient.CloudSaveData;
-        //list of string
-
-        var savedData = await cloudSave.GetCustomItemsAsync(context, context.AccessToken, context.ProjectId, "queue", new List<string>() { gameSessionQueueName });
-        var results = savedData.Data.Results;
-        logger.LogInformation("[Allocator]Game Session Results Count: {ResultsCount}", results.Count);
-        //debug results as JSON
-        logger.LogInformation("[Allocator]Game Session Results: {Results}", JsonConvert.SerializeObject(results));
-      //  _defaultMaximumPlayerSessionCount = results[0].Value as int? ?? 0;
-        logger.LogInformation("[Allocator]Using Maximum Player Session Count: {MaxPlayerSessionCount}", _defaultMaximumPlayerSessionCount);
+        try
+        {
+            var cloudSave = gameApiClient.CloudSaveData;
+            var savedData = await cloudSave.GetCustomItemsAsync(context, context.AccessToken, context.ProjectId, "queue", new List<string>() { gameSessionQueueName });
+            var results = savedData.Data.Results;
+            var resultValue = results[0].Value as string;
+            _defaultMaximumPlayerSessionCount = int.TryParse(resultValue, out var maxPlayers) ? maxPlayers : _defaultMaximumPlayerSessionCount;
+            logger.LogInformation("[Allocator]Maximum Player Session Count: {MaxPlayerSessionCount}", _defaultMaximumPlayerSessionCount);
+        }
+        catch (Exception e)
+        {
+            logger.LogError(e, "[Allocator]Failed to retrieve maximum player session count from Cloud Save, using default: {DefaultMaxPlayerSessionCount}", _defaultMaximumPlayerSessionCount);
+        }
  
+
         try
         {
             // Retrieve AWS credentials from Unity Secret Manager
