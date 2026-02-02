@@ -45,6 +45,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
         // Determine AWS region from match properties or use default
         var region = request.MatchmakingResults.MatchProperties.GetValueOrDefault("region")?.ToString() ?? DefaultAwsRegion;
         var gameSessionQueueName = request.MatchmakingResults.QueueName;
+        gameSessionQueueName += "_" + context.EnvironmentName; // Append environment name to queue name for isolation ex : GladiatorQueue_development
         logger.LogInformation("[Allocator]Using Game Session Queue Name: {GameSessionQueueName}", gameSessionQueueName);
 
         try
@@ -60,7 +61,7 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
         {
             logger.LogError(e, "[Allocator]Failed to retrieve maximum player session count from Cloud Save, using default: {DefaultMaxPlayerSessionCount}", _defaultMaximumPlayerSessionCount);
         }
- 
+
 
         try
         {
