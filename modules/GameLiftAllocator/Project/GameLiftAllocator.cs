@@ -45,13 +45,14 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
         // Determine AWS region from match properties or use default
         var region = request.MatchmakingResults.MatchProperties.GetValueOrDefault("region")?.ToString() ?? DefaultAwsRegion;
         var gameSessionQueueName = request.MatchmakingResults.QueueName;
-        gameSessionQueueName += "-" + context.EnvironmentName; // Append environment name to queue name for isolation ex : GladiatorQueue-development
+      //  gameSessionQueueName += "-" + context.EnvironmentName; // Append environment name to queue name for isolation ex : GladiatorQueue-development
+        gameSessionQueueName += "-development"; // Append development suffix for testing
         logger.LogInformation("[Allocator]Using Game Session Queue Name: {GameSessionQueueName}", gameSessionQueueName);
-
+        
         try
         {
             var cloudSave = gameApiClient.CloudSaveData;
-            var savedData = await cloudSave.GetCustomItemsAsync(context, context.AccessToken, context.ProjectId, "queue", new List<string>() { gameSessionQueueName });
+            var savedData = await cloudSave.GetCustomItemsAsync(context, context.AccessToken, context.ProjectId, "queue", new List<string>() { request.MatchmakingResults.QueueName });
             var results = savedData.Data.Results;
             var resultValue = results[0].Value as string;
             _defaultMaximumPlayerSessionCount = int.TryParse(resultValue, out var maxPlayers) ? maxPlayers : _defaultMaximumPlayerSessionCount;
