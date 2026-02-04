@@ -12,6 +12,7 @@ using Unity.Services.CloudCode.Apis.Matchmaker;
 using IExecutionContext = Unity.Services.CloudCode.Core.IExecutionContext;
 using Microsoft.Extensions.Logging;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GameLiftAllocatorModule;
 
@@ -79,6 +80,12 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
             // Serialize match data for the game server
             var gameSessionData = JsonConvert.SerializeObject(request.MatchmakingResults);
 
+            var playerLatencies = BuildPlayerLatencies(request.MatchmakingResults);
+            if (playerLatencies.Count > 0)
+            {
+                logger.LogInformation("[Allocator]Prepared {PlayerLatencyCount} player latencies from matchmaking results", playerLatencies.Count);
+            }
+            
             logger.LogInformation("[Allocator]Game session data: {GameSessionData}", gameSessionData);
             // Start game session placement
             var placementRequest = new StartGameSessionPlacementRequest
@@ -86,7 +93,8 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
                 PlacementId = request.MatchId, // Use matchId for idempotency
                 GameSessionQueueName = gameSessionQueueName,
                 MaximumPlayerSessionCount = _defaultMaximumPlayerSessionCount,
-                GameSessionData = gameSessionData
+                GameSessionData = gameSessionData,
+                PlayerLatencies = playerLatencies.Count > 0 ? playerLatencies : null
             };
 
             logger.LogInformation("[Allocator]Sending StartGameSessionPlacement request: {@PlacementRequest}", placementRequest);
@@ -189,6 +197,60 @@ public class GameLiftAllocator(IGameApiClient gameApiClient, IGameLiftFactory ga
                 Message = $"Failed to describe game session placement: {ex.Message}"
             };
         }
+    }
+
+    private static List<PlayerLatency> BuildPlayerLatencies(MatchmakingResults matchmakingResults)
+    {
+        var playerLatencies = new List<PlayerLatency>();
+        if (matchmakingResults?.MatchProperties == null)
+        {
+            return playerLatencies;
+        }
+
+        if (!matchmakingResults.MatchProperties.TryGetValue("Players", out var playersObj) || playersObj == null)
+        {
+            return playerLatencies;
+        }
+
+        var playersToken = playersObj as JToken ?? JToken.FromObject(playersObj);
+        if (playersToken.Type != JTokenType.Array)
+        {
+            return playerLatencies;
+        }
+
+        foreach (var playerToken in playersToken.Children<JToken>())
+        {
+            var playerId = playerToken["Id"]?.ToString();
+            if (string.IsNullOrWhiteSpace(playerId))
+            {
+                continue;
+            }
+
+            var qosResultsToken = playerToken["QosResults"] as JArray ?? playerToken["QosResults"]?.ToObject<JArray>();
+            if (qosResultsToken == null)
+            {
+                continue;
+            }
+
+            foreach (var qosToken in qosResultsToken.Children<JToken>())
+            {
+                var regionId = qosToken["RegionId"]?.ToString();
+                var latencyMs = qosToken["Latency"]?.Value<float?>();
+                if (string.IsNullOrWhiteSpace(regionId) || latencyMs == null)
+                {
+                    continue;
+                }
+
+                playerLatencies.Add(new PlayerLatency
+                {
+                    PlayerId = playerId,
+                    RegionIdentifier = regionId,
+                    LatencyInMilliseconds = latencyMs.Value
+                });
+            }
+        }
+
+        return playerLatencies;
     }
 }
 
